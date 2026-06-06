@@ -1,0 +1,20 @@
+# Java build artifacts
+*.class
+classes.dex
+
+# Compiled outputs
+*.jar
+*.apk
+
+# Compiled C binaries (no extension)
+droid
+runas2000
+
+# Build tool leftovers
+*.d
+*.o
+
+# Editor
+.idea/
+*.iml
+.vscode/
