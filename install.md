@@ -36,3 +36,6 @@ rm -rf /tmp/buildtools
 ```bash
 d8 --version
 ```
+or
+
+pacman -S android-platform-34 android-sdk-build-tools
