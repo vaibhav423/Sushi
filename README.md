@@ -2,7 +2,7 @@
 
 A native Android API bridge that runs inside an Arch Linux chroot on a rooted Android device.
 
- A persistent Java daemon runs directly on the Android Runtime (ART) via `app_process` and listens on an abstract UNIX socket. A tiny C client (`droid`) sends commands to it from anywhere on the device, including inside the chroot.
+A persistent Java daemon runs directly on the Android Runtime (ART) via `app_process` and listens on an abstract UNIX socket. A tiny C client (`droid`) sends commands to it from anywhere on the device, including inside the chroot.
 
 ## Requirements
 
