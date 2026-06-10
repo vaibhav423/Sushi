@@ -11,9 +11,12 @@ export HOME=/
 export USER=shell
 export LOGNAME=shell
 
-# Pull the exact BOOTCLASSPATH from Android's init process environment
-export BOOTCLASSPATH=$(cat /proc/1/environ | tr '\0' '\n' | grep ^BOOTCLASSPATH | cut -d= -f2-)
-export DEX2OATBOOTCLASSPATH=/apex/com.android.art/javalib/core-oj.jar:/apex/com.android.art/javalib/core-libart.jar:/apex/com.android.art/javalib/okhttp.jar:/apex/com.android.art/javalib/bouncycastle.jar:/apex/com.android.art/javalib/apache-xml.jar:/system/framework/framework.jar:/system/framework/framework-graphics.jar:/system/framework/framework-location.jar:/system/framework/ext.jar:/system/framework/telephony-common.jar:/system/framework/voip-common.jar:/system/framework/ims-common.jar:/system/framework/framework-ondeviceintelligence-platform.jar:/system/framework/telephony-ext.jar:/apex/com.android.i18n/javalib/core-icu4j.jar
+# Read BOOTCLASSPATH and DEX2OATBOOTCLASSPATH from zygote64
+ZYGOTE_PID=$(ps -A | grep "zygote64" | awk '{print $2}' | head -1)
+if [ -n "$ZYGOTE_PID" ]; then
+    export BOOTCLASSPATH=$(cat /proc/$ZYGOTE_PID/environ | tr "\000" "\n" | grep "^BOOTCLASSPATH=" | cut -d= -f2-)
+    export DEX2OATBOOTCLASSPATH=$(cat /proc/$ZYGOTE_PID/environ | tr "\000" "\n" | grep "^DEX2OATBOOTCLASSPATH=" | cut -d= -f2-)
+fi
 
 export CLASSPATH=/data/local/tmp/ChrootBridge.jar
 
