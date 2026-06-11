@@ -1,12 +1,16 @@
 // Example: Check for Notification Listener access
 //
-// NOTE: Settings.Secure.getString() checks calling UID against the
-// package name reported by ContentResolver, which bypasses the
-// ContextWrapper.getSystemService() patch. This works only when
-// running as UID 1000 (no runas2000).
+// Settings.Secure.getString() requires ContentResolver, which requires
+// the process to be registered with ActivityManagerService as a live app.
+// app_process daemons are not registered, so this always fails.
 //
-// Workaround: call from shell directly:
+// Use instead:
 //   asu -c 'settings get secure enabled_notification_listeners'
 
+import android.content.*;
+
+// Workaround: read via reflection-based IPC to settings provider directly
+// (This also fails — AMS ProcessRecord check blocks unregistered processes)
+
 bridge.toast("Use: asu -c 'settings get secure enabled_notification_listeners'");
-return "Use asu for settings queries (UID 2000 cannot access ContentProvider as android package)";
+return "ContentResolver not available in app_process (process not registered with AMS)";

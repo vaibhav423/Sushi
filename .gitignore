@@ -16,9 +16,6 @@ runas1000
 *.d
 *.o
 
-# SushiUI build outputs
-SushiUI/build/
-
 # Signing keys and artifacts
 debug.keystore
 *.idsig

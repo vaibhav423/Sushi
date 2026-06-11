@@ -1,10 +1,7 @@
-import android.app.Application;
-import android.app.Instrumentation;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.ContextWrapper;
-import android.content.pm.ApplicationInfo;
 import android.hardware.input.InputManager;
 import android.net.LocalServerSocket;
 import android.net.LocalSocket;
@@ -79,13 +76,6 @@ public class ChrootBridge {
                 return service;
             }
         };
-
-        try {
-            Application app = Instrumentation.newApplication(Application.class, sContext);
-            Field mInitialApplicationField = atClass.getDeclaredField("mInitialApplication");
-            mInitialApplicationField.setAccessible(true);
-            mInitialApplicationField.set(activityThread, app);
-        } catch (Throwable t) {}
 
         initBeanShell();
 
@@ -172,8 +162,8 @@ public class ChrootBridge {
                     return "Usage: input text <string>";
                 }
                 case "clipboard": {
+                    ClipboardManager cm = (ClipboardManager) sContext.getSystemService(Context.CLIPBOARD_SERVICE);
                     if (args.length > 1 && "get".equals(args[1])) {
-                        ClipboardManager cm = (ClipboardManager) sContext.getSystemService(Context.CLIPBOARD_SERVICE);
                         ClipData clip = cm.getPrimaryClip();
                         if (clip != null && clip.getItemCount() > 0) {
                             CharSequence text = clip.getItemAt(0).getText();
@@ -183,11 +173,17 @@ public class ChrootBridge {
                     } else if (args.length > 2 && "set".equals(args[1])) {
                         StringBuilder sb = new StringBuilder();
                         for (int i=2; i<args.length; i++) sb.append(args[i]).append(" ");
-                        ClipboardManager cm = (ClipboardManager) sContext.getSystemService(Context.CLIPBOARD_SERVICE);
                         cm.setPrimaryClip(ClipData.newPlainText("label", sb.toString().trim()));
                         return "OK";
                     }
                     return "Usage: clipboard get|set <text>";
+                }
+                case "clipboard-set": {
+                    byte[] d = Base64.getDecoder().decode(args[1]);
+                    String text = new String(d, "UTF-8");
+                    ClipboardManager cm = (ClipboardManager) sContext.getSystemService(Context.CLIPBOARD_SERVICE);
+                    cm.setPrimaryClip(ClipData.newPlainText("label", text));
+                    return "OK";
                 }
                 case "java":
                     byte[] decoded = Base64.getDecoder().decode(args[1]);

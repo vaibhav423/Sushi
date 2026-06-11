@@ -25,17 +25,6 @@ tail -f /data/local/tmp/daemon.log   # daemon stdout/stderr
 tail -f /data/local/tmp/bridge_boot.log  # boot-time log
 ```
 
-## Building SushiUI APK (LSPosed module)
-
-```bash
-# On x86_64 build machine via SSH (requires Android SDK + aapt2)
-cd SushiUI && bash build_x86.sh
-# Then deploy to Android:
-cp build/SushiUI.apk /data/local/tmp/archl/mnt/real_android_data/local/tmp/
-# Install via asu:
-asu -c 'pm install -r -t /data/local/tmp/SushiUI.apk'
-```
-
 ## C binaries (droid client, runas2000)
 
 These are compiled by `deploy.sh` automatically from `droid.c` and `runas2000.c`. To rebuild manually:

@@ -64,20 +64,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  int sock = socket(AF_UNIX, SOCK_STREAM, 0);
-  if (sock < 0) { perror("socket"); return 1; }
-
-  struct sockaddr_un addr;
-  memset(&addr, 0, sizeof(addr));
-  addr.sun_family = AF_UNIX;
-  addr.sun_path[0] = 0;
-  strcpy(addr.sun_path + 1, SOCKET_NAME);
-
-  if (connect(sock, (struct sockaddr*)&addr,
-      sizeof(sa_family_t) + 1 + strlen(SOCKET_NAME)) < 0) {
-    perror("connect");
-    return 1;
-  }
+  char *cmd = NULL;
 
   if (strcmp(argv[1], "-f") == 0 || strcmp(argv[1], "-") == 0) {
     char *content;
@@ -103,27 +90,55 @@ int main(int argc, char *argv[]) {
     b64enc((unsigned char*)content, len, b64out);
     free(content);
 
-    size_t cmdlen = 5 + b64len;
-    char *cmd = malloc(cmdlen);
-    snprintf(cmd, cmdlen, "java %s", b64out);
+    cmd = malloc(5 + b64len);
+    snprintf(cmd, 5 + b64len, "java %s", b64out);
     free(b64out);
-    send_and_recv(sock, cmd);
-    free(cmd);
-  } else {
-    for (int i = 1; i < argc; i++) {
-      write(sock, argv[i], strlen(argv[i]));
-      if (i < argc - 1) write(sock, " ", 1);
+  } else if (argc >= 4 && strcmp(argv[1], "clipboard") == 0 && strcmp(argv[2], "set") == 0) {
+    size_t datalen = 1;
+    for (int i = 3; i < argc; i++) datalen += strlen(argv[i]) + 1;
+    char *data = malloc(datalen);
+    data[0] = 0;
+    for (int i = 3; i < argc; i++) {
+      strcat(data, argv[i]);
+      if (i < argc - 1) strcat(data, " ");
     }
-    write(sock, "\n", 1);
-    char buf[4096];
-    int n;
-    while ((n = read(sock, buf, sizeof(buf) - 1)) > 0) {
-      buf[n] = 0;
-      printf("%s", buf);
-      fflush(stdout);
+    size_t b64len = ((datalen + 2) / 3) * 4 + 1;
+    char *b64out = malloc(b64len);
+    b64enc((unsigned char*)data, strlen(data), b64out);
+    free(data);
+
+    cmd = malloc(19 + b64len);
+    snprintf(cmd, 19 + b64len, "clipboard-set %s", b64out);
+    free(b64out);
+  } else {
+    size_t cmdlen = 1;
+    for (int i = 1; i < argc; i++) cmdlen += strlen(argv[i]) + 1;
+    cmd = malloc(cmdlen);
+    cmd[0] = 0;
+    for (int i = 1; i < argc; i++) {
+      strcat(cmd, argv[i]);
+      if (i < argc - 1) strcat(cmd, " ");
     }
   }
 
+  if (!cmd) { fprintf(stderr, "error: failed to build command\n"); return 1; }
+
+  int sock = socket(AF_UNIX, SOCK_STREAM, 0);
+  if (sock < 0) { perror("socket"); free(cmd); return 1; }
+
+  struct sockaddr_un addr;
+  memset(&addr, 0, sizeof(addr));
+  addr.sun_family = AF_UNIX;
+  addr.sun_path[0] = 0;
+  strcpy(addr.sun_path + 1, SOCKET_NAME);
+
+  if (connect(sock, (struct sockaddr*)&addr,
+      sizeof(sa_family_t) + 1 + strlen(SOCKET_NAME)) < 0) {
+    perror("connect"); free(cmd); close(sock); return 1;
+  }
+
+  send_and_recv(sock, cmd);
+  free(cmd);
   close(sock);
   return 0;
 }
