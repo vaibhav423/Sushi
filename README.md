@@ -2,124 +2,132 @@
 
 A native Android API bridge that runs inside an Arch Linux chroot on a rooted Android device.
 
-A persistent Java daemon runs directly on the Android Runtime (ART) via `app_process` and listens on an abstract UNIX socket. A tiny C client (`droid`) sends commands to it from anywhere on the device, including inside the chroot.
+A persistent Java daemon runs directly on the Android Runtime (ART) via `app_process` and listens on an abstract UNIX socket. A tiny C client (`droid`) sends commands to it from anywhere on the device, including inside the chroot. Interactive UI is handled by an LSPosed module injected into SystemUI, communicating with the daemon over a second abstract socket.
 
 ## Requirements
 
-**Host machine (for building)**
+**Build machine (x86_64 Arch)**
 - JDK (OpenJDK 17+)
-- Android SDK build-tools (`d8`) and `android.jar` for API 34
-- Android NDK or any aarch64 cross-compiler (for `droid.c` and `runas2000.c`)
+- Android SDK platform 34 + build-tools 37 — see `install.md`
 
 **Device**
-- Rooted Android 12+ (Magisk or APatch)
-- Arch Linux chroot (or any Linux chroot)
+- Rooted Android 14 (APatch or Magisk)
+- Arch Linux chroot at `/data/local/tmp/archl`
+- LSPosed (for UI module)
 
 ## Project structure
 
 ```
 Sushi/
 ├── ChrootBridge.java   # The daemon — runs on ART via app_process
-├── droid.c             # The client — tiny C binary used to send commands
+├── droid.c             # C socket client (installed at /usr/local/bin/droid)
 ├── runas2000.c         # UID-drop wrapper — exec's app_process as UID 2000 (shell)
-├── start-bridge.sh     # Launcher — sets Android env vars, calls runas2000
-└── build.sh            # Build + deploy script
+├── chroot-scripts/bridge.sh  # Daemon management: bridge {start|stop|status|restart}
+├── build.sh            # Builds ChrootBridge.jar (compile + DEX)
+├── chroot-scripts/deploy-from-chroot.sh  # Full build + deploy from inside the chroot
+├── guide.md            # Quick reference for edit → build → deploy → test cycle
+├── build/              # All build outputs
+│   ├── ChrootBridge.jar
+│   ├── droid
+│   ├── runas2000
+│   └── SushiUI.apk     # (copied from x86_64 build)
+├── SushiUI/            # LSPosed module for interactive UI
+│   ├── src/            # Xposed hook + socket server
+│   ├── AndroidManifest.xml
+│   └── build_x86.sh    # Build APK on x86_64 machine via aapt2
+├── libs/               # Dependencies
+│   └── bsh-2.0b6.jar   # BeanShell
+└── examples/           # BeanShell example scripts
 ```
 
-## How it works
+## Architecture
 
 ```
   ARCH LINUX CHROOT
-  ┌────────────────────────────────┐
-  │  $ droid toast "hello"         │  ← C binary, ~8KB
-  │        │                       │
-  │        │  abstract UNIX socket │
-  │        │  @android-bridge      │
-  └────────┼───────────────────────┘
+  ┌─────────────────────────────────────────────┐
+  │  $ droid toast "hello"                      │
+  │  $ bridge restart                           │
+  │        │                                    │
+  │        │  abstract UNIX socket @android-bridge
+  └────────┼────────────────────────────────────┘
            │  (shared kernel namespace)
   ANDROID HOST
-  ┌────────┼───────────────────────┐
-  │        ▼                       │
-  │  ChrootBridge (Java daemon)    │
-  │  running via app_process       │
-  │  as UID 2000 (shell)           │
-  │        │                       │
-  │        ▼                       │
-  │  Android Framework Services    │
-  │  Toast, Clipboard, Input...    │
-  └────────────────────────────────┘
+  ┌────────┼────────────────────────────────────┐
+  │        ▼                                    │
+  │  ChrootBridge (Java daemon)                 │
+  │  running via app_process as UID 2000        │
+  │        │                                    │
+  │  Commands: toast, clipboard, input, java    │
+  │  (BeanShell), dialog (via LSPosed socket)   │
+  │        │                                    │
+  │        ▼                                    │
+  │  Android Framework Services                 │
+  └─────────────────────────────────────────────┘
+
+  UI (LSPosed module in SystemUI):
+  ┌─────────────────────────────────────────────┐
+  │  SushiLspServer listens on @sushi-ui        │
+  │  Daemon sends "dialog title|msg|btn1,btn2"  │
+  │  SystemUI draws AlertDialog, returns button  │
+  └─────────────────────────────────────────────┘
 ```
 
-The daemon and client share the same Linux kernel, so the abstract socket is visible across the chroot boundary without any filesystem permissions.
-
-## Building
+## Quick start
 
 ```bash
-# Compile everything on the host machine
+# Build the JAR
 ./build.sh
+
+# Build + deploy to Android
+./chroot-scripts/deploy-from-chroot.sh
+
+# Start the daemon
+bridge start
+
+# Test
+droid hello
+droid toast "Hello from Sushi!"
+
+# See guide.md for full edit→build→deploy→test cycle
 ```
 
-This produces:
-- `ChrootBridge.jar` — deploy to `/data/local/tmp/` on the device
-- `droid` — deploy to `/usr/local/bin/` inside the chroot
-- `runas2000` — deploy to `/data/local/tmp/` on the device
-
-To cross-compile the C binaries for aarch64:
-```bash
-# runas2000 (runs on Android host, must be statically linked)
-aarch64-linux-gnu-gcc -static -o runas2000 runas2000.c
-
-# droid (runs inside Arch chroot, can be dynamically linked)
-aarch64-linux-gnu-gcc -o droid droid.c
-```
-
-## Deployment
+## Daemon management
 
 ```bash
-# Push JAR and binaries
-adb push ChrootBridge.jar /data/local/tmp/
-adb push runas2000 /data/local/tmp/
-adb shell chmod 755 /data/local/tmp/runas2000
-
-# Push the launcher into the chroot
-adb push start-bridge.sh /data/local/tmp/archl/usr/local/bin/start-bridge
-adb shell chmod 755 /data/local/tmp/archl/usr/local/bin/start-bridge
-
-# Push the client into the chroot
-adb push droid /data/local/tmp/archl/usr/local/bin/droid
-adb shell chmod 755 /data/local/tmp/archl/usr/local/bin/droid
+bridge status    # check if running
+bridge start     # start with proper env vars
+bridge stop      # kill daemon
+bridge restart   # stop + start
 ```
 
-## Starting the daemon
+The daemon auto-starts at boot via `/data/adb/service.d/bridge_boot.sh` (Magisk).
 
-From inside the chroot:
-```bash
-sudo start-bridge
-```
-
-To autostart at boot, add to `/data/adb/service.d/bridge_boot.sh` (Magisk):
-```bash
-#!/system/bin/sh
-sleep 5
-/data/local/tmp/archl/usr/local/bin/start-bridge &
-```
-
-## Usage
-
-All commands are sent through the `droid` client from inside the chroot.
+## Commands
 
 ```bash
 droid hello                        # sanity check
-droid toast "message"              # show a toast on screen
+droid toast "message"              # show a toast
 droid clipboard get                # print clipboard contents
-droid clipboard set "some text"    # write to clipboard
+droid clipboard set "text"         # write to clipboard
 droid input text enter             # inject Enter key
+droid java "base64-encoded-code"   # execute BeanShell code
+droid dialog "t|m|btn1,btn2"      # show dialog (requires LSPosed module)
 ```
 
-## Why `app_process` must run as UID 2000
+## LSPosed UI module
 
-`app_process` is designed to run as `shell` (UID 2000), not root (UID 0). Running it as root causes the kernel security layer to kill the process. Since the chroot `sudo` gives you UID 0, `runas2000.c` exists to drop privileges to UID 2000 before exec-ing `app_process`, while preserving the full environment via `execve`.
+The `SushiUI/` project builds an APK that hooks SystemUI. It opens an abstract socket `@sushi-ui` and waits for dialog requests from the daemon. Build on x86_64:
 
-## Why the environment variables matter
+```bash
+cd SushiUI && bash build_x86.sh   # outputs build/SushiUI.apk
+```
 
-ART requires `BOOTCLASSPATH`, `ANDROID_ROOT`, `ANDROID_ART_ROOT`, and several other variables to locate framework JARs and boot images. If any are missing or wrong it crashes with `SIGABRT` before your Java code runs. `start-bridge.sh` reads `BOOTCLASSPATH` directly from Android's init process (`/proc/1/environ`) to guarantee the correct value.
+Install on device: `asu -c 'pm install -r -t /data/local/tmp/SushiUI.apk'`, then enable in LSPosed Manager scoped to SystemUI.
+
+## Why UID 2000
+
+`app_process` must run as UID 2000 (shell), not root. `runas2000.c` drops privileges before exec-ing `app_process`. Running as UID 0 causes the kernel security layer to kill the process.
+
+## Why env vars matter
+
+ART requires `BOOTCLASSPATH`, `DEX2OATBOOTCLASSPATH`, `ANDROID_ROOT`, and others to find framework JARs. `bridge.sh` reads them from zygote64's proc environ to guarantee correct values. Missing or empty vars cause SIGABRT at startup.

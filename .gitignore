@@ -10,10 +10,18 @@ build/
 # Compiled C binaries (no extension)
 droid
 runas2000
+runas1000
 
 # Build tool leftovers
 *.d
 *.o
+
+# SushiUI build outputs
+SushiUI/build/
+
+# Signing keys and artifacts
+debug.keystore
+*.idsig
 
 # Editor
 .idea/

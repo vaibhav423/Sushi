@@ -1,20 +1,12 @@
 // Example: Check for Notification Listener access
-import android.service.notification.*;
-import android.content.*;
+//
+// NOTE: Settings.Secure.getString() checks calling UID against the
+// package name reported by ContentResolver, which bypasses the
+// ContextWrapper.getSystemService() patch. This works only when
+// running as UID 1000 (no runas2000).
+//
+// Workaround: call from shell directly:
+//   asu -c 'settings get secure enabled_notification_listeners'
 
-// Get NotificationListenerService if available
-// Note: This requires the Notification Listener to be enabled in system settings
-
-ComponentName cn = new ComponentName(context, "com.android.shell.NotificationListener");
-bridge.log("Component: " + cn.flattenToString());
-
-// Check if notification access is enabled
-String enabledListeners = android.provider.Settings.Secure.getString(
-    context.getContentResolver(), 
-    "enabled_notification_listeners"
-);
-
-bridge.log("Enabled listeners: " + enabledListeners);
-
-bridge.toast("Check logs for notification listener status");
-return enabledListeners;
+bridge.toast("Use: asu -c 'settings get secure enabled_notification_listeners'");
+return "Use asu for settings queries (UID 2000 cannot access ContentProvider as android package)";
